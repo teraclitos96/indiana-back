@@ -1,7 +1,7 @@
 const router = require('express').Router()
 const tokenValidation = require('../middlewars/auth')
 const { photoBodyValidators } = require('../validations/validationPhotos')
-const { createPhoto, getAllPhotos, getOnePhoto, deletePhoto, updatePhoto } = require('../controllers/photosControllers')
+const { createPhoto, getAllPhotos, getOnePhoto, deletePhoto, updatePhoto, updateCarStatus } = require('../controllers/photosControllers')
 const { uploadFile, handleMulterErrors } = require('../middlewars/multer')
 
 router.post(
@@ -29,6 +29,10 @@ router.put(
     ...photoBodyValidators
   ],
   updatePhoto)
+router.patch(
+  '/updatestatus/:id',
+  tokenValidation(process.env.SUPER_USER),
+  updateCarStatus)
 router.delete(
   '/deletephoto/:id',
   tokenValidation(process.env.SUPER_USER),

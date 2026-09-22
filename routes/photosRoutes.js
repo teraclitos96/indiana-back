@@ -5,6 +5,7 @@ const { createPhoto, getAllPhotos, getOnePhoto, deletePhoto, updatePhoto } = req
 const { uploadFile, handleMulterErrors } = require('../middlewars/multer')
 const asyncHandler = require('../middlewars/asyncHandler')
 const validateRequest = require('../middlewars/validateRequest')
+const { cachePublicGet } = require('../middlewars/cacheControl')
 
 router.post(
   '/create',
@@ -18,9 +19,11 @@ router.post(
   asyncHandler(createPhoto))
 router.get(
   '/getallphotos',
+  cachePublicGet,
   asyncHandler(getAllPhotos))
 router.get(
   '/getonephoto/:id',
+  cachePublicGet,
   asyncHandler(getOnePhoto))
 router.put(
   '/updatephoto/:id',

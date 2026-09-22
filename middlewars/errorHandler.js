@@ -1,11 +1,6 @@
 const AppError = require('../errors/AppError')
 const jwt = require('jsonwebtoken')
-
-const setPrivateNoStore = (res) => {
-  res.removeHeader('Vercel-CDN-Cache-Control')
-  res.removeHeader('CDN-Cache-Control')
-  res.setHeader('Cache-Control', 'private, no-store')
-}
+const { setPrivateNoStore } = require('./cacheControl')
 
 const normalizeError = (error) => {
   if (error instanceof AppError) {
@@ -66,6 +61,5 @@ const errorHandler = (error, req, res, next) => {
 
 module.exports = {
   errorHandler,
-  notFoundHandler,
-  setPrivateNoStore
+  notFoundHandler
 }

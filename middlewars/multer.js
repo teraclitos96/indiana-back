@@ -34,8 +34,6 @@ const uploadFile = () => {
     fileSize: MAX_IMAGE_SIZE_BYTES
   }
 
-  const uploadOneImage = multer({ storage, fileFilter, limits }).single('image')
-
   const uploadExtraPhotos = multer({ storage, fileFilter, limits }).array('extraPhotos')
 
   const uploadCarPhotos = multer({ storage, fileFilter, limits }).fields([
@@ -44,7 +42,7 @@ const uploadFile = () => {
     { name: 'fotosExtra' }
   ])
 
-  return { uploadExtraPhotos, uploadOneImage, uploadCarPhotos }
+  return { uploadExtraPhotos, uploadCarPhotos }
 }
 
 const errFormatImages = 'Incorrect format of the image'

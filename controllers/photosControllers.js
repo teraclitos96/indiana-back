@@ -4,6 +4,7 @@ const { deleteFiles } = require('../services/functionsPhotos')
 // const { validationResult } = require('express-validator')
 const { newArrayPhotosCloudinaryFunction } = require('../middlewars/cloudinary')
 const AppError = require('../errors/AppError')
+const { deleteCarsCache } = require('../services/cacheService')
 
 const flattenFiles = (filesObject) => {
   return Object.values(filesObject).flat()
@@ -186,6 +187,7 @@ exports.createPhoto = async (req, res) => {
     })
 
     await newCar.save()
+    await deleteCarsCache()
     res.status(201).json({ error: null, msg: 'Auto creado correctamente' })
   } catch (error) {
     if (cloudinaryResults && cloudinaryResults.length) {
@@ -319,6 +321,8 @@ exports.updatePhoto = async (req, res) => {
       { new: true }
     )
 
+    await deleteCarsCache()
+
     // Borrar fotos antiguas de Cloudinary solo si el update fue OK
     if (photosPublicIdsToDelete.length > 0) {
       await deleteFilesFromCloudinary(photosPublicIdsToDelete)
@@ -427,6 +431,8 @@ exports.deletePhoto = async (req, res) => {
   if (!photoDeleted) {
     throw new AppError('Auto no encontrado', 404)
   }
+
+  await deleteCarsCache()
 
   // Borrar fotos de Cloudinary del documento eliminado
   const publicIds = extractPublicIdsFromCarDoc(photoDeleted)

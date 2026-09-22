@@ -1,7 +1,10 @@
 const VERCEL_CACHE_HEADER = 'Vercel-CDN-Cache-Control'
+const VERCEL_CACHE_TAG_HEADER = 'Vercel-Cache-Tag'
+const CARS_CACHE_TAG = 'cars'
 
 const setPrivateNoStore = (res) => {
   res.removeHeader(VERCEL_CACHE_HEADER)
+  res.removeHeader(VERCEL_CACHE_TAG_HEADER)
   res.removeHeader('CDN-Cache-Control')
   res.setHeader('Cache-Control', 'private, no-store')
 }
@@ -17,10 +20,12 @@ const cachePublicGet = (req, res, next) => {
     VERCEL_CACHE_HEADER,
     'public, max-age=300, stale-while-revalidate=60'
   )
+  res.setHeader(VERCEL_CACHE_TAG_HEADER, CARS_CACHE_TAG)
   next()
 }
 
 module.exports = {
   cachePublicGet,
-  setPrivateNoStore
+  setPrivateNoStore,
+  CARS_CACHE_TAG
 }

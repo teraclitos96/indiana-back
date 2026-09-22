@@ -3,6 +3,8 @@ const tokenValidation = require('../middlewars/auth')
 const { photoBodyValidators } = require('../validations/validationPhotos')
 const { createPhoto, getAllPhotos, getOnePhoto, deletePhoto, updatePhoto } = require('../controllers/photosControllers')
 const { uploadFile, handleMulterErrors } = require('../middlewars/multer')
+const asyncHandler = require('../middlewars/asyncHandler')
+const validateRequest = require('../middlewars/validateRequest')
 
 router.post(
   '/create',
@@ -12,13 +14,14 @@ router.post(
   [
     ...photoBodyValidators
   ],
-  createPhoto)
+  validateRequest,
+  asyncHandler(createPhoto))
 router.get(
   '/getallphotos',
-  getAllPhotos)
+  asyncHandler(getAllPhotos))
 router.get(
   '/getonephoto/:id',
-  getOnePhoto)
+  asyncHandler(getOnePhoto))
 router.put(
   '/updatephoto/:id',
 
@@ -28,9 +31,10 @@ router.put(
   [
     ...photoBodyValidators
   ],
-  updatePhoto)
+  validateRequest,
+  asyncHandler(updatePhoto))
 router.delete(
   '/deletephoto/:id',
   tokenValidation(process.env.SUPER_USER),
-  deletePhoto)
+  asyncHandler(deletePhoto))
 module.exports = router

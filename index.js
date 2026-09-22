@@ -7,6 +7,8 @@ if (process.env.NODE_ENV !== 'production') {
   require('dotenv').config()
 }
 const connectDatabase = require('./dataBase')
+const asyncHandler = require('./middlewars/asyncHandler')
+const { errorHandler, notFoundHandler } = require('./middlewars/errorHandler')
 const PORT = process.env.PORT || 3001
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
@@ -32,22 +34,16 @@ app.use(express.urlencoded({ extended: true }))
 app.use(morgan('dev'))
 app.use(cors(corsOptions))
 
-app.use(async (req, res, next) => {
-  try {
-    await connectDatabase()
-    next()
-  } catch (error) {
-    console.error('Error connecting to MongoDB:', error)
-    res.status(503).json({
-      error: true,
-      msg: 'Database temporarily unavailable'
-    })
-  }
-})
+app.use(asyncHandler(async (req, res, next) => {
+  await connectDatabase()
+  next()
+}))
 
 const routes = require('./routes')
 
 app.use('/', routes)
+app.use(notFoundHandler)
+app.use(errorHandler)
 
 const startServer = async () => {
   try {

@@ -1,6 +1,7 @@
 const multer = require('multer')
 const path = require('path')
 const { v4: uuidv4 } = require('uuid')
+const AppError = require('../errors/AppError')
 const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024
 const IMAGE_MIME_TYPES = ['image/jpeg', 'image/png', 'image/webp']
 const IMAGE_EXTENSIONS = ['.jpeg', '.jpg', '.png', '.webp']
@@ -48,13 +49,20 @@ const uploadFile = () => {
 const errFormatImages = 'Incorrect format of the image'
 
 const handleMulterErrors = (err, req, res, next) => {
-  if (err instanceof multer.MulterError || err.message === errFormatImages) {
-    return res.status(400).json({ error: true, msg: err.message })
-  } else if (err) {
-    return res.status(500).json({ error: true, msg: err.message })
+  if (!err) {
+    return next()
   }
 
-  next()
+  if (err instanceof multer.MulterError) {
+    const statusCode = err.code === 'LIMIT_FILE_SIZE' ? 413 : 400
+    return next(new AppError(err.message, statusCode, { cause: err }))
+  }
+
+  if (err.message === errFormatImages) {
+    return next(new AppError(err.message, 400, { cause: err }))
+  }
+
+  next(err)
 }
 
 module.exports = { uploadFile, handleMulterErrors }

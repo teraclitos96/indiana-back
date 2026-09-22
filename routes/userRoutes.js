@@ -2,6 +2,8 @@ const { createUser, loginUser, logoutUser } = require('../controllers/userContro
 const { validateEmptyFields, validateLengthFields } = require('../validations/validationUser')
 const tokenValidation = require('../middlewars/auth')
 const { createRateLimit } = require('../middlewars/rateLimit')
+const asyncHandler = require('../middlewars/asyncHandler')
+const validateRequest = require('../middlewars/validateRequest')
 const router = require('express').Router()
 const loginRateLimit = createRateLimit({
   windowMs: 15 * 60 * 1000,
@@ -15,7 +17,8 @@ router.post(
     ...validateEmptyFields(),
     ...validateLengthFields()
   ],
-  createUser)
+  validateRequest,
+  asyncHandler(createUser))
 router.post(
   '/loginuser',
   loginRateLimit,
@@ -23,6 +26,7 @@ router.post(
     ...validateEmptyFields(),
     ...validateLengthFields()
   ],
-  loginUser)
-router.post('/logoutuser', tokenValidation(process.env.SUPER_USER), logoutUser)
+  validateRequest,
+  asyncHandler(loginUser))
+router.post('/logoutuser', tokenValidation(process.env.SUPER_USER), asyncHandler(logoutUser))
 module.exports = router

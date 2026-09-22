@@ -1,3 +1,5 @@
+const AppError = require('../errors/AppError')
+
 const createRateLimit = ({
   windowMs = 15 * 60 * 1000,
   maxAttempts = 10,
@@ -21,10 +23,7 @@ const createRateLimit = ({
     if (current.count >= maxAttempts) {
       const retryAfterSeconds = Math.ceil((current.resetAt - now) / 1000)
       res.set('Retry-After', String(retryAfterSeconds))
-      return res.status(429).json({
-        error: true,
-        msg: 'too many login attempts, try again later'
-      })
+      return next(new AppError('too many login attempts, try again later', 429))
     }
 
     current.count += 1

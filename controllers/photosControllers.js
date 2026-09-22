@@ -3,6 +3,7 @@ const { deleteFilesFromCloudinary } = require('../middlewars/cloudinary')
 const { deleteFiles } = require('../services/functionsPhotos')
 // const { validationResult } = require('express-validator')
 const { newArrayPhotosCloudinaryFunction } = require('../middlewars/cloudinary')
+const AppError = require('../errors/AppError')
 
 const flattenFiles = (filesObject) => {
   return Object.values(filesObject).flat()
@@ -25,9 +26,7 @@ const DISCOUNT_TYPES = {
 }
 
 const createValidationError = (message) => {
-  const error = new Error(message)
-  error.statusCode = 400
-  return error
+  return new AppError(message, 400)
 }
 
 const parseDescuento = (descuento) => {
@@ -125,26 +124,24 @@ exports.createPhoto = async (req, res) => {
   const files = req.files || {}
   const filesArray = flattenFiles(files)
   const missingPhotos = HIGHLIGHTED_PHOTOS.filter(field => !files[field] || files[field].length === 0)
-  if (missingPhotos.length > 0) {
-    deleteFiles(filesArray)
-    return res.status(400).json({
-      error: true,
-      msg: `Faltan las siguientes fotos obligatorias: ${missingPhotos.join(', ')}`
-    })
-  }
-
-  const carExists = await PhotosModel.findOne(
-    { marca, modelo, version, kilometraje },
-    {},
-    { collation: { locale: 'es', strength: 1 } }
-  )
-  if (carExists) {
-    deleteFiles(filesArray)
-    return res.status(400).json({ error: true, msg: 'Este auto ya está registrado' })
-  }
-
   let cloudinaryResults
   try {
+    if (missingPhotos.length > 0) {
+      throw new AppError(
+        `Faltan las siguientes fotos obligatorias: ${missingPhotos.join(', ')}`,
+        400
+      )
+    }
+
+    const carExists = await PhotosModel.findOne(
+      { marca, modelo, version, kilometraje },
+      {},
+      { collation: { locale: 'es', strength: 1 } }
+    )
+    if (carExists) {
+      throw new AppError('Este auto ya está registrado', 409)
+    }
+
     const parsedDescuento = parseDescuento(descuento)
     const precioOferta = calcularPrecioOferta({ precio, descuento: parsedDescuento })
     cloudinaryResults = await newArrayPhotosCloudinaryFunction(filesArray)
@@ -194,9 +191,13 @@ exports.createPhoto = async (req, res) => {
     if (cloudinaryResults && cloudinaryResults.length) {
       // revierte subidas a Cloudinary si falló la persistencia
       const arrayOfPublicIds = cloudinaryResults.map(p => Array.isArray(p) ? p.map(i => i.public_id) : p.public_id).flat()
-      await deleteFilesFromCloudinary(arrayOfPublicIds)
+      try {
+        await deleteFilesFromCloudinary(arrayOfPublicIds)
+      } catch (cleanupError) {
+        console.error('Cloudinary rollback failed:', cleanupError)
+      }
     }
-    res.status(error.statusCode || 500).json({ error: true, msg: error.message })
+    throw error
   } finally {
     deleteFiles(filesArray)
   }
@@ -224,8 +225,7 @@ exports.updatePhoto = async (req, res) => {
   try {
     oldPhoto = await PhotosModel.findById(req.params.id)
     if (!oldPhoto) {
-      deleteFiles(filesArray)
-      return res.status(404).json({ error: true, msg: 'Auto no encontrado' })
+      throw new AppError('Auto no encontrado', 404)
     }
 
     // Validar unicidad si cambia marca+modelo+versión
@@ -242,8 +242,7 @@ exports.updatePhoto = async (req, res) => {
         .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
 
     if (!isSameCar && carExists) {
-      deleteFiles(filesArray)
-      return res.status(400).json({ error: true, msg: 'Este auto ya está registrado' })
+      throw new AppError('Este auto ya está registrado', 409)
     }
 
     const parsedDescuento = parseDescuento(descuento)
@@ -329,9 +328,13 @@ exports.updatePhoto = async (req, res) => {
   } catch (error) {
     // Si falló luego de subir nuevas, borra nuevas para no dejar basura
     if (newUploads && newUploads.length) {
-      await deleteFilesFromCloudinary(newUploads.map(p => p.public_id))
+      try {
+        await deleteFilesFromCloudinary(newUploads.map(p => p.public_id))
+      } catch (cleanupError) {
+        console.error('Cloudinary rollback failed:', cleanupError)
+      }
     }
-    res.status(error.statusCode || 500).json({ error: true, msg: error.message })
+    throw error
   } finally {
     deleteFiles(filesArray)
   }
@@ -358,86 +361,78 @@ exports.getAllPhotos = async (req, res) => {
     return null
   }
 
-  try {
-    // Filtros desde query
-    const marcas = parseArray(req.query.marca) // ej: ?marca=Toyota,Ford
-    const cajas = parseArray(req.query.caja) // ej: ?caja=Manual,Automática
-    const combustibles = parseArray(req.query.combustible) // ej: ?combustible=Nafta,Gasoil
-    const kmRange = parseRange(req.query.km) // ej: ?km=0,50000
-    const precioRange = parseRange(req.query.precio) // ej: ?precio=2000000,5000000
-    const anioRange = parseRange(req.query.anio) // ej: ?anio=2015,2024
+  // Filtros desde query
+  const marcas = parseArray(req.query.marca) // ej: ?marca=Toyota,Ford
+  const cajas = parseArray(req.query.caja) // ej: ?caja=Manual,Automática
+  const combustibles = parseArray(req.query.combustible) // ej: ?combustible=Nafta,Gasoil
+  const kmRange = parseRange(req.query.km) // ej: ?km=0,50000
+  const precioRange = parseRange(req.query.precio) // ej: ?precio=2000000,5000000
+  const anioRange = parseRange(req.query.anio) // ej: ?anio=2015,2024
 
-    console.log({ marcas, cajas, combustibles, kmRange, precioRange, anioRange })
+  console.log({ marcas, cajas, combustibles, kmRange, precioRange, anioRange })
 
-    // Construir filtro dinámico
-    const filter = {}
-    if (marcas.length) filter.marca = { $in: marcas }
-    if (cajas.length) filter.caja = { $in: cajas }
-    if (combustibles.length) filter.combustible = { $in: combustibles }
-    if (kmRange) {
-      const [minKm, maxKm] = kmRange
-      filter.kilometraje = { $gte: minKm, $lte: maxKm }
-    }
-    if (precioRange) {
-      const [minP, maxP] = precioRange
-      filter.precio = { $gte: minP, $lte: maxP }
-    }
-    if (anioRange) {
-      const [minY, maxY] = anioRange
-      filter.anio = { $gte: minY, $lte: maxY }
-    }
-
-    const allPhotos = await PhotosModel.paginate(
-      filter,
-      {
-        page: parsedCursor,
-        limit: parsedLimit,
-        sort: { createdAt: -1 },
-        collation: { locale: 'es', strength: 1 },
-        lean: true, // devuelve objetos JS planos, no documentos de mongoose
-        select: `${MAIN_PROPERTIES.join(' ')}`
-      }
-    )
-
-    allPhotos.docs = allPhotos.docs.map(doc => {
-      return {
-        _id: doc._id,
-        ...MAIN_PROPERTIES.reduce((acc, prop) => {
-          acc[prop] = doc[prop]
-          return acc
-        }, {})
-      }
-    })
-
-    res.status(200).json({ error: null, allPhotos })
-  } catch (error) {
-    res.status(500).json({ error: true, msg: error.message })
+  // Construir filtro dinámico
+  const filter = {}
+  if (marcas.length) filter.marca = { $in: marcas }
+  if (cajas.length) filter.caja = { $in: cajas }
+  if (combustibles.length) filter.combustible = { $in: combustibles }
+  if (kmRange) {
+    const [minKm, maxKm] = kmRange
+    filter.kilometraje = { $gte: minKm, $lte: maxKm }
   }
+  if (precioRange) {
+    const [minP, maxP] = precioRange
+    filter.precio = { $gte: minP, $lte: maxP }
+  }
+  if (anioRange) {
+    const [minY, maxY] = anioRange
+    filter.anio = { $gte: minY, $lte: maxY }
+  }
+
+  const allPhotos = await PhotosModel.paginate(
+    filter,
+    {
+      page: parsedCursor,
+      limit: parsedLimit,
+      sort: { createdAt: -1 },
+      collation: { locale: 'es', strength: 1 },
+      lean: true, // devuelve objetos JS planos, no documentos de mongoose
+      select: `${MAIN_PROPERTIES.join(' ')}`
+    }
+  )
+
+  allPhotos.docs = allPhotos.docs.map(doc => {
+    return {
+      _id: doc._id,
+      ...MAIN_PROPERTIES.reduce((acc, prop) => {
+        acc[prop] = doc[prop]
+        return acc
+      }, {})
+    }
+  })
+
+  res.status(200).json({ error: null, allPhotos })
 }
+
 exports.getOnePhoto = async (req, res) => {
-  try {
-    const getOnePhoto = await PhotosModel.findById(req.params.id.trim())
-    res.status(200).json({ error: null, getOnePhoto })
-  } catch (error) {
-    res.status(500).json({ error: true, msg: error.message })
+  const getOnePhoto = await PhotosModel.findById(req.params.id.trim())
+  if (!getOnePhoto) {
+    throw new AppError('Auto no encontrado', 404)
   }
+  res.status(200).json({ error: null, getOnePhoto })
 }
 
 exports.deletePhoto = async (req, res) => {
-  try {
-    const photoDeleted = await PhotosModel.findByIdAndDelete(req.params.id)
-    if (!photoDeleted) {
-      return res.status(404).json({ error: true, msg: 'Auto no encontrado' })
-    }
-
-    // Borrar fotos de Cloudinary del documento eliminado
-    const publicIds = extractPublicIdsFromCarDoc(photoDeleted)
-    if (publicIds.length) {
-      await deleteFilesFromCloudinary(publicIds)
-    }
-
-    res.status(200).json({ error: null, msg: 'Auto eliminado correctamente' })
-  } catch (error) {
-    res.status(500).json({ error: true, msg: error.message })
+  const photoDeleted = await PhotosModel.findByIdAndDelete(req.params.id)
+  if (!photoDeleted) {
+    throw new AppError('Auto no encontrado', 404)
   }
+
+  // Borrar fotos de Cloudinary del documento eliminado
+  const publicIds = extractPublicIdsFromCarDoc(photoDeleted)
+  if (publicIds.length) {
+    await deleteFilesFromCloudinary(publicIds)
+  }
+
+  res.status(200).json({ error: null, msg: 'Auto eliminado correctamente' })
 }

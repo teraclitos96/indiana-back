@@ -24,8 +24,14 @@ const cachePublicGet = (req, res, next) => {
   next()
 }
 
+const noStore = (req, res, next) => {
+  setPrivateNoStore(res)
+  next()
+}
+
 module.exports = {
   cachePublicGet,
+  noStore,
   setPrivateNoStore,
   CARS_CACHE_TAG
 }

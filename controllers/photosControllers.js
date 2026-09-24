@@ -68,7 +68,8 @@ const MAIN_PROPERTIES = [
   'kilometraje',
   'precioOferta',
   'descuento',
-  'oferta'
+  'oferta',
+  'estado'
 ]
 
 const extractPublicIdsFromCarDoc = (carDoc) => {
@@ -344,7 +345,7 @@ exports.updatePhoto = async (req, res) => {
   }
 }
 
-exports.getAllPhotos = async (req, res) => {
+const getAllPhotosByVisibility = async (req, res, includePaused) => {
   const { cursor = 1, limit = 8 } = req.query
   const parsedCursor = parseInt(cursor, 10) || 1
   const parsedLimit = parseInt(limit, 10) || 8
@@ -376,7 +377,21 @@ exports.getAllPhotos = async (req, res) => {
   console.log({ marcas, cajas, combustibles, kmRange, precioRange, anioRange })
 
   // Construir filtro dinámico
-  const filter = {}
+  const filter = includePaused
+    ? {}
+    : {
+        $or: [
+          {
+            estado: {
+              $in: [
+                PhotosModel.CAR_STATUSES.ACTIVE,
+                PhotosModel.CAR_STATUSES.SOLD
+              ]
+            }
+          },
+          { estado: { $exists: false } }
+        ]
+      }
   if (marcas.length) filter.marca = { $in: marcas }
   if (cajas.length) filter.caja = { $in: cajas }
   if (combustibles.length) filter.combustible = { $in: combustibles }
@@ -406,6 +421,7 @@ exports.getAllPhotos = async (req, res) => {
   )
 
   allPhotos.docs = allPhotos.docs.map(doc => {
+    doc.estado = doc.estado || PhotosModel.CAR_STATUSES.ACTIVE
     return {
       _id: doc._id,
       ...MAIN_PROPERTIES.reduce((acc, prop) => {
@@ -418,12 +434,49 @@ exports.getAllPhotos = async (req, res) => {
   res.status(200).json({ error: null, allPhotos })
 }
 
+exports.getAllPhotos = async (req, res) => {
+  return getAllPhotosByVisibility(req, res, false)
+}
+
+exports.getAllPhotosPrivate = async (req, res) => {
+  return getAllPhotosByVisibility(req, res, true)
+}
+
 exports.getOnePhoto = async (req, res) => {
   const getOnePhoto = await PhotosModel.findById(req.params.id.trim())
   if (!getOnePhoto) {
     throw new AppError('Auto no encontrado', 404)
   }
   res.status(200).json({ error: null, getOnePhoto })
+}
+
+exports.updateCarStatus = async (req, res) => {
+  const estado = typeof req.body.estado === 'string'
+    ? req.body.estado.trim().toUpperCase()
+    : ''
+  const validStatuses = Object.values(PhotosModel.CAR_STATUSES)
+
+  if (!validStatuses.includes(estado)) {
+    throw new AppError(`El estado debe ser uno de: ${validStatuses.join(', ')}`, 400)
+  }
+
+  const updated = await PhotosModel.findByIdAndUpdate(
+    req.params.id.trim(),
+    { $set: { estado } },
+    { new: true, runValidators: true }
+  ).select('_id estado')
+
+  if (!updated) {
+    throw new AppError('Auto no encontrado', 404)
+  }
+
+  await deleteCarsCache()
+
+  res.status(200).json({
+    error: null,
+    msg: 'Estado del auto actualizado correctamente',
+    updated
+  })
 }
 
 exports.deletePhoto = async (req, res) => {

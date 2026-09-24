@@ -22,12 +22,16 @@ const getMongoDatabase = (mongoUrl) => {
 
 const assertDevelopmentTarget = ({ nodeEnv, mongoUrl }) => {
   if (nodeEnv !== 'development') {
-    throw new Error(`Entorno no permitido: NODE_ENV debe ser development (actual: ${nodeEnv || 'sin definir'})`)
+    throw new Error(
+      `Entorno no permitido: NODE_ENV debe ser development (actual: ${nodeEnv || 'sin definir'})`
+    )
   }
 
   const database = getMongoDatabase(mongoUrl)
   if (!database.toLowerCase().endsWith('dev')) {
-    throw new Error('Base de datos no permitida: el nombre definido en MONGO_URL debe terminar en "dev"')
+    throw new Error(
+      'Base de datos no permitida: el nombre definido en MONGO_URL debe terminar en "dev"'
+    )
   }
 }
 
@@ -49,9 +53,7 @@ const collectPublicIds = (cars) => [
 ]
 
 const assertSafeCloudinaryIds = (publicIds) => {
-  const unsafeId = publicIds.find(
-    (publicId) => !publicId.startsWith('indiana/')
-  )
+  const unsafeId = publicIds.find((publicId) => !publicId.startsWith('indiana/'))
   if (unsafeId) {
     throw new Error(
       `Se canceló el borrado: el public_id "${unsafeId}" está fuera de la carpeta indiana/`
@@ -62,15 +64,13 @@ const assertSafeCloudinaryIds = (publicIds) => {
 const deleteFromCloudinary = async (publicIds) => {
   if (publicIds.length === 0) return
 
-  const { cloudinary } = require('../middlewars/cloudinary')
+  const { deleteImage } = require('../services/cloudinaryService')
   for (const publicId of publicIds) {
-    const result = await cloudinary.v2.uploader.destroy(publicId, {
+    const result = await deleteImage(publicId, {
       invalidate: true
     })
     if (!['ok', 'not found'].includes(result.result)) {
-      throw new Error(
-        `Cloudinary no pudo borrar "${publicId}": ${result.result}`
-      )
+      throw new Error(`Cloudinary no pudo borrar "${publicId}": ${result.result}`)
     }
   }
 }
@@ -84,17 +84,12 @@ const run = async () => {
   assertDevelopmentTarget({ nodeEnv: process.env.NODE_ENV, mongoUrl })
 
   if (options.includeCloudinary && !options.execute) {
-    throw new Error(
-      '--include-cloudinary solo puede usarse junto con --execute'
-    )
+    throw new Error('--include-cloudinary solo puede usarse junto con --execute')
   }
   if (options.execute && options.confirmation !== CONFIRMATION) {
     throw new Error(`Para ejecutar el reset agregá --confirm=${CONFIRMATION}`)
   }
-  if (
-    options.includeCloudinary &&
-    process.env.ALLOW_CLOUDINARY_RESET !== 'true'
-  ) {
+  if (options.includeCloudinary && process.env.ALLOW_CLOUDINARY_RESET !== 'true') {
     throw new Error(
       'Para borrar archivos remotos definí ALLOW_CLOUDINARY_RESET=true explícitamente'
     )

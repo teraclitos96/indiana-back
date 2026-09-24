@@ -13,20 +13,16 @@ const loginRateLimit = createRateLimit({
 
 router.post(
   '/createuser',
-  [
-    ...validateEmptyFields(),
-    ...validateLengthFields()
-  ],
+  [...validateEmptyFields(), ...validateLengthFields()],
   validateRequest,
-  asyncHandler(createUser))
+  asyncHandler(createUser)
+)
 router.post(
   '/loginuser',
   loginRateLimit,
-  [
-    ...validateEmptyFields(),
-    ...validateLengthFields()
-  ],
+  [...validateEmptyFields(), ...validateLengthFields()],
   validateRequest,
-  asyncHandler(loginUser))
+  asyncHandler(loginUser)
+)
 router.post('/logoutuser', tokenValidation(process.env.SUPER_USER), asyncHandler(logoutUser))
 module.exports = router

@@ -53,9 +53,7 @@ const errorHandler = (error, req, res, next) => {
 
   res.status(statusCode).json({
     error: true,
-    msg: normalizedError.isOperational
-      ? normalizedError.message
-      : 'Error interno del servidor'
+    msg: normalizedError.isOperational ? normalizedError.message : 'Error interno del servidor'
   })
 }
 

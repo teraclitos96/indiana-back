@@ -15,7 +15,9 @@ const cachePublicGet = (req, res, next) => {
     return next()
   }
 
-  res.setHeader('Cache-Control', 'public, max-age=0, must-revalidate')
+  // Keep the browser from retaining a validator for a response that may be
+  // deleted independently from Vercel's CDN cache.
+  res.setHeader('Cache-Control', 'private, no-store')
   res.setHeader(
     VERCEL_CACHE_HEADER,
     'public, max-age=300, stale-while-revalidate=60'

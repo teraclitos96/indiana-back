@@ -6,7 +6,10 @@
   "scripts": {
     "start": "cross-env NODE_ENV=production  node index.js",
     "dev": "cross-env NODE_ENV=development nodemon index.js",
-    "reset:car-photos": "cross-env NODE_ENV=development node scripts/resetCarPhotos.js"
+    "reset:car-photos": "cross-env NODE_ENV=development node scripts/resetCarPhotos.js",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
   },
   "keywords": [],
   "author": "",
@@ -27,15 +30,20 @@
     "mongoose-paginate-v2": "^1.7.1",
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
+    "nodemailer": "^9.0.5",
     "uuid": "^9.0.0"
   },
   "devDependencies": {
+    "eslint": "^8.57.1",
+    "eslint-config-prettier": "^9.1.2",
     "nodemon": "^2.0.22",
+    "prettier": "^3.9.6",
     "standard": "^17.1.0"
   },
   "eslintConfig": {
     "extends": [
-      "./node_modules/standard/eslintrc.json"
+      "./node_modules/standard/eslintrc.json",
+      "prettier"
     ]
   }
 }

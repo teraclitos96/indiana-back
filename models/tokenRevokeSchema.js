@@ -10,7 +10,6 @@ const TokenRevokeSchema = new mongoose.Schema({
     required: true,
     index: { expires: '12h' }
   }
-
 })
 
 const TokenRevokeModel = mongoose.model('token', TokenRevokeSchema)

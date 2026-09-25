@@ -1,8 +1,7 @@
 const PhotosModel = require('../models/photosSchema')
-const { deleteFilesFromCloudinary } = require('../middlewars/cloudinary')
+const { deleteImages, uploadCarPhotos } = require('../services/cloudinaryService')
 const { deleteFiles } = require('../services/functionsPhotos')
 // const { validationResult } = require('express-validator')
-const { newArrayPhotosCloudinaryFunction } = require('../middlewars/cloudinary')
 const AppError = require('../errors/AppError')
 const { deleteCarsCache } = require('../services/cacheService')
 
@@ -11,15 +10,9 @@ const flattenFiles = (filesObject) => {
 }
 
 // Helpers
-const HIGHLIGHTED_PHOTOS = [
-  'fotoPrincipal',
-  'fotoHover'
-]
+const HIGHLIGHTED_PHOTOS = ['fotoPrincipal', 'fotoHover']
 
-const ALL_PHOTOS = [
-  ...HIGHLIGHTED_PHOTOS,
-  'fotosExtra'
-]
+const ALL_PHOTOS = [...HIGHLIGHTED_PHOTOS, 'fotosExtra']
 
 const DISCOUNT_TYPES = {
   PERCENTAGE: 'PORCENTAJE',
@@ -74,16 +67,16 @@ const MAIN_PROPERTIES = [
 
 const extractPublicIdsFromCarDoc = (carDoc) => {
   if (!carDoc) return []
-  return ALL_PHOTOS
-    .map(k => {
-      if (Array.isArray(carDoc[k])) {
-        return carDoc[k].map(photo => photo.public_id)
-      } else if (carDoc[k] && carDoc[k].public_id) {
-        return carDoc[k].public_id
-      }
-      return null
-    })
-    .filter(Boolean).flat()
+  return ALL_PHOTOS.map((k) => {
+    if (Array.isArray(carDoc[k])) {
+      return carDoc[k].map((photo) => photo.public_id)
+    } else if (carDoc[k] && carDoc[k].public_id) {
+      return carDoc[k].public_id
+    }
+    return null
+  })
+    .filter(Boolean)
+    .flat()
 }
 
 const calcularPrecioOferta = ({ precio, descuento = {} }) => {
@@ -94,7 +87,9 @@ const calcularPrecioOferta = ({ precio, descuento = {} }) => {
 
   const valorDescuento = Number(descuento.valor ?? 0)
   if (!Number.isFinite(valorDescuento) || valorDescuento < 0) {
-    throw createValidationError('El valor del descuento debe ser un número válido mayor o igual a 0')
+    throw createValidationError(
+      'El valor del descuento debe ser un número válido mayor o igual a 0'
+    )
   }
 
   const tipoDescuento = descuento.tipo || DISCOUNT_TYPES.FIXED_AMOUNT
@@ -107,9 +102,10 @@ const calcularPrecioOferta = ({ precio, descuento = {} }) => {
     throw createValidationError('El descuento en porcentaje no puede ser mayor a 100')
   }
 
-  const precioOferta = tipoDescuento === DISCOUNT_TYPES.PERCENTAGE
-    ? precioTotal - precioTotal * (valorDescuento / 100)
-    : precioTotal - valorDescuento
+  const precioOferta =
+    tipoDescuento === DISCOUNT_TYPES.PERCENTAGE
+      ? precioTotal - precioTotal * (valorDescuento / 100)
+      : precioTotal - valorDescuento
 
   if (precioOferta <= 0) {
     throw createValidationError('El descuento no puede ser mayor o igual al precio')
@@ -120,12 +116,27 @@ const calcularPrecioOferta = ({ precio, descuento = {} }) => {
 
 exports.createPhoto = async (req, res) => {
   const {
-    marca, modelo, version, precio, caja, segmento, cilindrada, color,
-    anio, combustible, kilometraje, traccion, HP, descuento, oferta
+    marca,
+    modelo,
+    version,
+    precio,
+    caja,
+    segmento,
+    cilindrada,
+    color,
+    anio,
+    combustible,
+    kilometraje,
+    traccion,
+    HP,
+    descuento,
+    oferta
   } = req.body
   const files = req.files || {}
   const filesArray = flattenFiles(files)
-  const missingPhotos = HIGHLIGHTED_PHOTOS.filter(field => !files[field] || files[field].length === 0)
+  const missingPhotos = HIGHLIGHTED_PHOTOS.filter(
+    (field) => !files[field] || files[field].length === 0
+  )
   let cloudinaryResults
   try {
     if (missingPhotos.length > 0) {
@@ -146,7 +157,7 @@ exports.createPhoto = async (req, res) => {
 
     const parsedDescuento = parseDescuento(descuento)
     const precioOferta = calcularPrecioOferta({ precio, descuento: parsedDescuento })
-    cloudinaryResults = await newArrayPhotosCloudinaryFunction(filesArray)
+    cloudinaryResults = await uploadCarPhotos(filesArray)
 
     // Mismo mapeo que en create original: usar fieldName para las claves
     const carPhotos = cloudinaryResults.reduce((acc, photo) => {
@@ -158,11 +169,14 @@ exports.createPhoto = async (req, res) => {
           original_name: photo.original_name
         }
       } else {
-        acc[key] = [...(Array.isArray(acc[key]) ? acc[key] : [acc[key]]), {
-          url: photo.url,
-          public_id: photo.public_id,
-          original_name: photo.original_name
-        }]
+        acc[key] = [
+          ...(Array.isArray(acc[key]) ? acc[key] : [acc[key]]),
+          {
+            url: photo.url,
+            public_id: photo.public_id,
+            original_name: photo.original_name
+          }
+        ]
       }
       return acc
     }, {})
@@ -193,9 +207,11 @@ exports.createPhoto = async (req, res) => {
   } catch (error) {
     if (cloudinaryResults && cloudinaryResults.length) {
       // revierte subidas a Cloudinary si falló la persistencia
-      const arrayOfPublicIds = cloudinaryResults.map(p => Array.isArray(p) ? p.map(i => i.public_id) : p.public_id).flat()
+      const arrayOfPublicIds = cloudinaryResults
+        .map((p) => (Array.isArray(p) ? p.map((i) => i.public_id) : p.public_id))
+        .flat()
       try {
-        await deleteFilesFromCloudinary(arrayOfPublicIds)
+        await deleteImages(arrayOfPublicIds)
       } catch (cleanupError) {
         console.error('Cloudinary rollback failed:', cleanupError)
       }
@@ -209,8 +225,22 @@ exports.createPhoto = async (req, res) => {
 exports.updatePhoto = async (req, res) => {
   // Debe ser congruente con create: exigir las 5 fotos y el mismo mapeo
   const {
-    marca, modelo, version, precio, caja, segmento, cilindrada, color,
-    anio, combustible, kilometraje, traccion, HP, descuento, oferta, eliminadas = []
+    marca,
+    modelo,
+    version,
+    precio,
+    caja,
+    segmento,
+    cilindrada,
+    color,
+    anio,
+    combustible,
+    kilometraje,
+    traccion,
+    HP,
+    descuento,
+    oferta,
+    eliminadas = []
   } = req.body
 
   const files = req.files || {}
@@ -218,9 +248,9 @@ exports.updatePhoto = async (req, res) => {
   let carPhotos = {}
   const photosPublicIdsToDelete = [...eliminadas]
 
-  const missingPhotos = HIGHLIGHTED_PHOTOS.filter(field => !files[field])
+  const missingPhotos = HIGHLIGHTED_PHOTOS.filter((field) => !files[field])
 
-  const newPhotos = Object.keys(files).filter(k => k !== 'fotosExtra')
+  const newPhotos = Object.keys(files).filter((k) => k !== 'fotosExtra')
 
   let oldPhoto = null
   let newUploads = null
@@ -240,9 +270,13 @@ exports.updatePhoto = async (req, res) => {
 
     const isSameCar =
       (marca + modelo + version)
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase() ===
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase() ===
       (oldPhoto.marca + oldPhoto.modelo + oldPhoto.version)
-        .normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase()
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
 
     if (!isSameCar && carExists) {
       throw new AppError('Este auto ya está registrado', 409)
@@ -253,7 +287,7 @@ exports.updatePhoto = async (req, res) => {
 
     // Subir nuevas fotos (congruente con create)
     if (filesArray.length > 0) {
-      newUploads = await newArrayPhotosCloudinaryFunction(filesArray)
+      newUploads = await uploadCarPhotos(filesArray)
       carPhotos = newUploads.reduce((acc, photo) => {
         const key = photo.fieldName
         if (!acc[key]) {
@@ -263,26 +297,29 @@ exports.updatePhoto = async (req, res) => {
             original_name: photo.original_name
           }
         } else {
-          acc[key] = [...(Array.isArray(acc[key]) ? acc[key] : [acc[key]]), {
-            url: photo.url,
-            public_id: photo.public_id,
-            original_name: photo.original_name
-          }]
+          acc[key] = [
+            ...(Array.isArray(acc[key]) ? acc[key] : [acc[key]]),
+            {
+              url: photo.url,
+              public_id: photo.public_id,
+              original_name: photo.original_name
+            }
+          ]
         }
         return acc
       }, {})
     }
 
     if (missingPhotos.length > 0) {
-      missingPhotos.forEach(field => {
+      missingPhotos.forEach((field) => {
         carPhotos[field] = oldPhoto[field]
       })
     }
     if (newPhotos.length > 0) {
-      photosPublicIdsToDelete.push(...newPhotos.map(f => oldPhoto[f]?.public_id).filter(Boolean))
+      photosPublicIdsToDelete.push(...newPhotos.map((f) => oldPhoto[f]?.public_id).filter(Boolean))
     }
     const oldPhotosExtraNotDeleted = oldPhoto.fotosExtra
-      ? oldPhoto.fotosExtra.filter(photo => !eliminadas.includes(photo.public_id))
+      ? oldPhoto.fotosExtra.filter((photo) => !eliminadas.includes(photo.public_id))
       : []
     if (!carPhotos.fotosExtra) {
       carPhotos.fotosExtra = []
@@ -291,10 +328,7 @@ exports.updatePhoto = async (req, res) => {
       carPhotos.fotosExtra = [carPhotos.fotosExtra]
     }
     if (oldPhotosExtraNotDeleted.length > 0) {
-      carPhotos.fotosExtra = [
-        ...oldPhotosExtraNotDeleted,
-        ...carPhotos.fotosExtra || []
-      ]
+      carPhotos.fotosExtra = [...oldPhotosExtraNotDeleted, ...(carPhotos.fotosExtra || [])]
     }
 
     // Actualizar documento
@@ -326,7 +360,7 @@ exports.updatePhoto = async (req, res) => {
 
     // Borrar fotos antiguas de Cloudinary solo si el update fue OK
     if (photosPublicIdsToDelete.length > 0) {
-      await deleteFilesFromCloudinary(photosPublicIdsToDelete)
+      await deleteImages(photosPublicIdsToDelete)
     }
 
     res.status(200).json({ error: null, msg: 'Auto actualizado correctamente', updated })
@@ -334,7 +368,7 @@ exports.updatePhoto = async (req, res) => {
     // Si falló luego de subir nuevas, borra nuevas para no dejar basura
     if (newUploads && newUploads.length) {
       try {
-        await deleteFilesFromCloudinary(newUploads.map(p => p.public_id))
+        await deleteImages(newUploads.map((p) => p.public_id))
       } catch (cleanupError) {
         console.error('Cloudinary rollback failed:', cleanupError)
       }
@@ -352,12 +386,17 @@ const getAllPhotosByVisibility = async (req, res, includePaused) => {
 
   const parseArray = (v) => {
     if (!v) return []
-    return String(v).split(',').map(s => s.trim()).filter(Boolean)
+    return String(v)
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean)
   }
 
   const parseRange = (v) => {
     if (!v) return null
-    const parts = String(v).split(',').map(s => s.trim())
+    const parts = String(v)
+      .split(',')
+      .map((s) => s.trim())
     if (parts.length >= 2) {
       const min = Number(parts[0])
       const max = Number(parts[1])
@@ -383,10 +422,7 @@ const getAllPhotosByVisibility = async (req, res, includePaused) => {
         $or: [
           {
             estado: {
-              $in: [
-                PhotosModel.CAR_STATUSES.ACTIVE,
-                PhotosModel.CAR_STATUSES.SOLD
-              ]
+              $in: [PhotosModel.CAR_STATUSES.ACTIVE, PhotosModel.CAR_STATUSES.SOLD]
             }
           },
           { estado: { $exists: false } }
@@ -408,19 +444,16 @@ const getAllPhotosByVisibility = async (req, res, includePaused) => {
     filter.anio = { $gte: minY, $lte: maxY }
   }
 
-  const allPhotos = await PhotosModel.paginate(
-    filter,
-    {
-      page: parsedCursor,
-      limit: parsedLimit,
-      sort: { createdAt: -1 },
-      collation: { locale: 'es', strength: 1 },
-      lean: true, // devuelve objetos JS planos, no documentos de mongoose
-      select: `${MAIN_PROPERTIES.join(' ')}`
-    }
-  )
+  const allPhotos = await PhotosModel.paginate(filter, {
+    page: parsedCursor,
+    limit: parsedLimit,
+    sort: { createdAt: -1 },
+    collation: { locale: 'es', strength: 1 },
+    lean: true, // devuelve objetos JS planos, no documentos de mongoose
+    select: `${MAIN_PROPERTIES.join(' ')}`
+  })
 
-  allPhotos.docs = allPhotos.docs.map(doc => {
+  allPhotos.docs = allPhotos.docs.map((doc) => {
     doc.estado = doc.estado || PhotosModel.CAR_STATUSES.ACTIVE
     return {
       _id: doc._id,
@@ -451,9 +484,7 @@ exports.getOnePhoto = async (req, res) => {
 }
 
 exports.updateCarStatus = async (req, res) => {
-  const estado = typeof req.body.estado === 'string'
-    ? req.body.estado.trim().toUpperCase()
-    : ''
+  const estado = typeof req.body.estado === 'string' ? req.body.estado.trim().toUpperCase() : ''
   const validStatuses = Object.values(PhotosModel.CAR_STATUSES)
 
   if (!validStatuses.includes(estado)) {
@@ -490,7 +521,7 @@ exports.deletePhoto = async (req, res) => {
   // Borrar fotos de Cloudinary del documento eliminado
   const publicIds = extractPublicIdsFromCarDoc(photoDeleted)
   if (publicIds.length) {
-    await deleteFilesFromCloudinary(publicIds)
+    await deleteImages(publicIds)
   }
 
   res.status(200).json({ error: null, msg: 'Auto eliminado correctamente' })

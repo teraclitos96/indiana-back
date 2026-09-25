@@ -12,7 +12,7 @@ const { errorHandler, notFoundHandler } = require('./middlewars/errorHandler')
 const PORT = process.env.PORT || 3001
 const allowedOrigins = (process.env.ALLOWED_ORIGINS || '')
   .split(',')
-  .map(origin => origin.trim())
+  .map((origin) => origin.trim())
   .filter(Boolean)
 
 if (process.env.NODE_ENV === 'production' && allowedOrigins.length === 0) {
@@ -34,10 +34,12 @@ app.use(express.urlencoded({ extended: true }))
 app.use(morgan('dev'))
 app.use(cors(corsOptions))
 
-app.use(asyncHandler(async (req, res, next) => {
-  await connectDatabase()
-  next()
-}))
+app.use(
+  asyncHandler(async (req, res, next) => {
+    await connectDatabase()
+    next()
+  })
+)
 
 const routes = require('./routes')
 
